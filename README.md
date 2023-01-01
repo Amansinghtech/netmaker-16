@@ -16,10 +16,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/pyTechcoder/netmaker/releases">
+  <a href="https://github.com/Amansinghtech/netmaker-16/releases">
     <img src="https://img.shields.io/badge/Version-0.16.0-informational?style=flat-square" />
   </a>
-  <a href="https://hub.docker.com/r/pyTechcoder/netmaker/tags">
+  <a href="https://hub.docker.com/r/Amansinghtech/netmaker-16/tags">
     <img src="https://img.shields.io/docker/pulls/gravitl/netmaker?label=downloads" />
   </a>  
   <a href="https://goreportcard.com/report/github.com/gravitl/netmaker">
@@ -54,8 +54,8 @@
 
 1. Get a cloud VM with Ubuntu 20.04 and a public IP.
 2. Open ports 443 and 51821-51830/udp on the VM firewall and in cloud security settings.
-3. Run the script: `wget -qO - https://raw.githubusercontent.com/pyTechcoder/netmaker/master/scripts/nm-quick.sh | sudo bash`  
-3.a. (with custom domain + email): `wget -qO - https://raw.githubusercontent.com/pyTechcoder/netmaker/master/scripts/nm-quick.sh | sudo bash -s -- -d mynetmaker.domain.com -e example@email.com`    
+3. Run the script: `wget -qO - https://raw.githubusercontent.com/Amansinghtech/netmaker-16/master/scripts/nm-quick.sh | sudo bash`  
+3.a. (with custom domain + email): `wget -qO - https://raw.githubusercontent.com/Amansinghtech/netmaker-16/master/scripts/nm-quick.sh | sudo bash -s -- -d mynetmaker.domain.com -e example@email.com`    
 
 <p float="left" align="middle">
 <img src="https://raw.githubusercontent.com/gravitl/netmaker-docs/master/images/netmaker-github/readme.gif" />
