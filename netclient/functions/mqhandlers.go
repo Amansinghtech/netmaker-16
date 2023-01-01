@@ -11,24 +11,23 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/guumaster/hostctl/pkg/file"
-	"github.com/guumaster/hostctl/pkg/parser"
-	"github.com/guumaster/hostctl/pkg/types"
-	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
-
 	"github.com/gravitl/netmaker/logger"
 	"github.com/gravitl/netmaker/models"
 	"github.com/gravitl/netmaker/netclient/config"
 	"github.com/gravitl/netmaker/netclient/local"
 	"github.com/gravitl/netmaker/netclient/ncutils"
 	"github.com/gravitl/netmaker/netclient/wireguard"
+	"github.com/guumaster/hostctl/pkg/file"
+	"github.com/guumaster/hostctl/pkg/parser"
+	"github.com/guumaster/hostctl/pkg/types"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 // All -- mqtt message hander for all ('#') topics
 var All mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	logger.Log(0, "default message handler -- received message but not handling")
 	logger.Log(0, "topic: "+string(msg.Topic()))
-	// logger.Log(0, "Message: " + string(msg.Payload()))
+	//logger.Log(0, "Message: " + string(msg.Payload()))
 }
 
 // NodeUpdate -- mqtt message handler for /update/<NodeID> topic
@@ -108,7 +107,7 @@ func NodeUpdate(client mqtt.Client, msg mqtt.Message) {
 		logger.Log(0, "error reading PrivateKey "+err.Error())
 		return
 	}
-	cfgFile := ncutils.GetNetclientPathSpecific() + nodeCfg.Node.Interface + ".conf"
+	file := ncutils.GetNetclientPathSpecific() + nodeCfg.Node.Interface + ".conf"
 
 	if newNode.ListenPort != nodeCfg.Node.LocalListenPort {
 		if err := wireguard.RemoveConf(newNode.Interface, false); err != nil {
@@ -122,15 +121,18 @@ func NodeUpdate(client mqtt.Client, msg mqtt.Message) {
 		ifaceDelta = true
 		informPortChange(&newNode)
 	}
-	if err := wireguard.UpdateWgInterface(cfgFile, privateKey, nameserver, newNode); err != nil {
+	if err := wireguard.UpdateWgInterface(file, privateKey, nameserver, newNode); err != nil {
 		logger.Log(0, "error updating wireguard config "+err.Error())
 		return
 	}
 	if keepaliveChange {
-		wireguard.UpdateKeepAlive(cfgFile, newNode.PersistentKeepalive)
+		wireguard.UpdateKeepAlive(file, newNode.PersistentKeepalive)
 	}
-	logger.Log(0, "applying WG conf to "+cfgFile)
-	err = wireguard.ApplyConf(&nodeCfg.Node, nodeCfg.Node.Interface, cfgFile)
+	logger.Log(0, "applying WG conf to "+file)
+	if ncutils.IsWindows() {
+		wireguard.RemoveConfGraceful(nodeCfg.Node.Interface)
+	}
+	err = wireguard.ApplyConf(&nodeCfg.Node, nodeCfg.Node.Interface, file)
 	if err != nil {
 		logger.Log(0, "error restarting wg after node update -", err.Error())
 		return
@@ -160,7 +162,7 @@ func NodeUpdate(client mqtt.Client, msg mqtt.Message) {
 			logger.Log(0, "network:", nodeCfg.Node.Network, "signalled finished hub update to server")
 		}
 	}
-	// deal with DNS
+	//deal with DNS
 	if newNode.DNSOn != "yes" && shouldDNSChange && nodeCfg.Node.Interface != "" {
 		logger.Log(0, "network:", nodeCfg.Node.Network, "settng DNS off")
 		if err := removeHostDNS(nodeCfg.Node.Interface, ncutils.IsWindows()); err != nil {
@@ -206,13 +208,13 @@ func UpdatePeers(client mqtt.Client, msg mqtt.Message) {
 		cfg.Server.Version = peerUpdate.ServerVersion
 		config.Write(&cfg, cfg.Network)
 	}
-	cfgFile := ncutils.GetNetclientPathSpecific() + cfg.Node.Interface + ".conf"
-	internetGateway, err := wireguard.UpdateWgPeers(cfgFile, peerUpdate.Peers)
+	file := ncutils.GetNetclientPathSpecific() + cfg.Node.Interface + ".conf"
+	internetGateway, err := wireguard.UpdateWgPeers(file, peerUpdate.Peers)
 	if err != nil {
 		logger.Log(0, "error updating wireguard peers"+err.Error())
 		return
 	}
-	// check if internet gateway has changed
+	//check if internet gateway has changed
 	oldGateway, err := net.ResolveUDPAddr("udp", cfg.Node.InternetGateway)
 
 	// note: may want to remove second part (oldGateway == &net.UDPAddr{})
@@ -225,7 +227,10 @@ func UpdatePeers(client mqtt.Client, msg mqtt.Message) {
 		if err := config.ModNodeConfig(&cfg.Node); err != nil {
 			logger.Log(0, "failed to save internet gateway", err.Error())
 		}
-		if err := wireguard.ApplyConf(&cfg.Node, cfg.Node.Interface, cfgFile); err != nil {
+		if ncutils.IsWindows() {
+			wireguard.RemoveConfGraceful(cfg.Node.Interface)
+		}
+		if err := wireguard.ApplyConf(&cfg.Node, cfg.Node.Interface, file); err != nil {
 			logger.Log(0, "error applying internet gateway", err.Error())
 		}
 		UpdateLocalListenPort(&cfg)
@@ -233,7 +238,7 @@ func UpdatePeers(client mqtt.Client, msg mqtt.Message) {
 	}
 	queryAddr := cfg.Node.PrimaryAddress()
 
-	// err = wireguard.SyncWGQuickConf(cfg.Node.Interface, file)
+	//err = wireguard.SyncWGQuickConf(cfg.Node.Interface, file)
 	var iface = cfg.Node.Interface
 	if ncutils.IsMac() {
 		iface, err = local.GetMacIface(queryAddr)

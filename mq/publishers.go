@@ -33,25 +33,23 @@ func PublishPeerUpdate(newNode *models.Node, publishToSelf bool) error {
 			//skip self
 			continue
 		}
-		err = PublishSinglePeerUpdate(&node)
+		peerUpdate, err := logic.GetPeerUpdate(&node)
 		if err != nil {
-			logger.Log(1, "failed to publish peer update to node", node.Name, "on network", node.Network, ":", err.Error())
+			logger.Log(1, "error getting peer update for node", node.ID, err.Error())
+			continue
+		}
+		data, err := json.Marshal(&peerUpdate)
+		if err != nil {
+			logger.Log(2, "error marshaling peer update for node", node.ID, err.Error())
+			continue
+		}
+		if err = publish(&node, fmt.Sprintf("peers/%s/%s", node.Network, node.ID), data); err != nil {
+			logger.Log(1, "failed to publish peer update for node", node.ID)
+		} else {
+			logger.Log(1, "sent peer update for node", node.Name, "on network:", node.Network)
 		}
 	}
-	return err
-}
-
-// PublishSinglePeerUpdate --- determines and publishes a peer update to one node
-func PublishSinglePeerUpdate(node *models.Node) error {
-	peerUpdate, err := logic.GetPeerUpdate(node)
-	if err != nil {
-		return err
-	}
-	data, err := json.Marshal(&peerUpdate)
-	if err != nil {
-		return err
-	}
-	return publish(node, fmt.Sprintf("peers/%s/%s", node.Network, node.ID), data)
+	return nil
 }
 
 // PublishPeerUpdate --- publishes a peer update to all the peers of a node
@@ -186,7 +184,7 @@ func ServerStartNotify() error {
 
 // function to collect and store metrics for server nodes
 func collectServerMetrics(networks []models.Network) {
-	if !servercfg.Is_EE {
+	if !logic.Is_EE {
 		return
 	}
 	if len(networks) > 0 {
@@ -219,7 +217,9 @@ func collectServerMetrics(networks []models.Network) {
 									logger.Log(2, "failed to push server metrics to exporter: ", err.Error())
 								}
 							}
+
 						}
+
 					}
 				}
 			}
@@ -233,7 +233,7 @@ func pushMetricsToExporter(metrics models.Metrics) error {
 	if err != nil {
 		return errors.New("failed to marshal metrics: " + err.Error())
 	}
-	if token := mqclient.Publish("metrics_exporter", 2, true, data); !token.WaitTimeout(MQ_TIMEOUT*time.Second) || token.Error() != nil {
+	if token := mqclient.Publish("metrics_exporter", 0, true, data); !token.WaitTimeout(MQ_TIMEOUT*time.Second) || token.Error() != nil {
 		var err error
 		if token.Error() == nil {
 			err = errors.New("connection timeout")

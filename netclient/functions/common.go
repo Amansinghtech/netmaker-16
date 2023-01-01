@@ -15,8 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.zx2c4.com/wireguard/wgctrl"
-
 	"github.com/gravitl/netmaker/logger"
 	"github.com/gravitl/netmaker/models"
 	"github.com/gravitl/netmaker/netclient/config"
@@ -24,6 +22,7 @@ import (
 	"github.com/gravitl/netmaker/netclient/local"
 	"github.com/gravitl/netmaker/netclient/ncutils"
 	"github.com/gravitl/netmaker/netclient/wireguard"
+	"golang.zx2c4.com/wireguard/wgctrl"
 )
 
 // LINUX_APP_DATA_PATH - linux path
@@ -62,27 +61,27 @@ func ListPorts() error {
 
 func getPrivateAddr() (string, error) {
 
-	var localIPStr string
+	var local string
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err == nil {
 		defer conn.Close()
 
 		localAddr := conn.LocalAddr().(*net.UDPAddr)
 		localIP := localAddr.IP
-		localIPStr = localIP.String()
+		local = localIP.String()
 	}
-	if localIPStr == "" {
-		localIPStr, err = getPrivateAddrBackup()
+	if local == "" {
+		local, err = getPrivateAddrBackup()
 	}
 
-	if localIPStr == "" {
+	if local == "" {
 		err = errors.New("could not find local ip")
 	}
-	if net.ParseIP(localIPStr).To16() != nil {
-		localIPStr = "[" + localIPStr + "]"
+	if net.ParseIP(local).To16() != nil {
+		local = "[" + local + "]"
 	}
 
-	return localIPStr, err
+	return local, err
 }
 
 func getPrivateAddrBackup() (string, error) {
@@ -126,37 +125,6 @@ func getPrivateAddrBackup() (string, error) {
 		return "", err
 	}
 	return local, err
-}
-
-func getInterfaces() (*[]models.Iface, error) {
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return nil, err
-	}
-	var data []models.Iface
-	var link models.Iface
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 {
-			continue // interface down
-		}
-		if iface.Flags&net.FlagLoopback != 0 {
-			continue // loopback interface
-		}
-		addrs, err := iface.Addrs()
-		if err != nil {
-			return nil, err
-		}
-		for _, addr := range addrs {
-			link.Name = iface.Name
-			_, cidr, err := net.ParseCIDR(addr.String())
-			if err != nil {
-				continue
-			}
-			link.Address = *cidr
-			data = append(data, link)
-		}
-	}
-	return &data, nil
 }
 
 // GetNode - gets node locally
@@ -224,8 +192,35 @@ func LeaveNetwork(network string) error {
 	if err := removeHostDNS(cfg.Node.Interface, ncutils.IsWindows()); err != nil {
 		logger.Log(0, "failed to delete dns entries for", cfg.Node.Interface, err.Error())
 	}
+	logger.Log(2, "deleting broker keys as required")
+	if !brokerInUse(cfg.Server.Server) {
+		if err := deleteBrokerFiles(cfg.Server.Server); err != nil {
+			logger.Log(0, "failed to deleter certs for", cfg.Server.Server, err.Error())
+		}
+	}
 	logger.Log(2, "restarting daemon")
 	return daemon.Restart()
+}
+
+func brokerInUse(broker string) bool {
+	networks, _ := ncutils.GetSystemNetworks()
+	for _, net := range networks {
+		cfg := config.ClientConfig{}
+		cfg.Network = net
+		cfg.ReadConfig()
+		if cfg.Server.Server == broker {
+			return true
+		}
+	}
+	return false
+}
+
+func deleteBrokerFiles(broker string) error {
+	dir := ncutils.GetNetclientServerPath(broker)
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	return nil
 }
 
 func deleteNodeFromServer(cfg *config.ClientConfig) error {
@@ -345,7 +340,6 @@ func API(data any, method, url, authorization string) (*http.Response, error) {
 	if authorization != "" {
 		request.Header.Set("authorization", "Bearer "+authorization)
 	}
-	request.Header.Set("requestfrom", "node")
 	return HTTPClient.Do(request)
 }
 

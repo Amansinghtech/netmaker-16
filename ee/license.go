@@ -8,7 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"math"
 	"net/http"
 
@@ -200,7 +200,7 @@ func validateLicenseKey(encryptedData []byte, publicKey *[32]byte) ([]byte, erro
 			return nil, fmt.Errorf("could not validate license")
 		} // if you received a 200 cache the response locally
 
-		body, err = io.ReadAll(validateResponse.Body)
+		body, err = ioutil.ReadAll(validateResponse.Body)
 		if err != nil {
 			return nil, err
 		}

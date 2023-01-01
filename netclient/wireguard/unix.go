@@ -5,13 +5,14 @@ import (
 	"os"
 
 	"github.com/gravitl/netmaker/logger"
+	"github.com/gravitl/netmaker/models"
 	"github.com/gravitl/netmaker/netclient/ncutils"
 )
 
 // ApplyWGQuickConf - applies wg-quick commands if os supports
 func ApplyWGQuickConf(confPath, ifacename string, isConnected bool) error {
 	if ncutils.IsWindows() {
-		return ApplyWindowsConf(confPath, ifacename, isConnected)
+		return ApplyWindowsConf(confPath, isConnected)
 	} else {
 		_, err := os.Stat(confPath)
 		if err != nil {
@@ -28,6 +29,17 @@ func ApplyWGQuickConf(confPath, ifacename string, isConnected bool) error {
 
 		return err
 	}
+}
+
+// ApplyMacOSConf - applies system commands similar to wg-quick using golang for MacOS
+func ApplyMacOSConf(node *models.Node, ifacename, confPath string, isConnected bool) error {
+	var err error
+	_ = WgQuickDownMac(node, ifacename)
+	if !isConnected {
+		return nil
+	}
+	err = WgQuickUpMac(node, ifacename, confPath)
+	return err
 }
 
 // RemoveWGQuickConf - calls wg-quick down

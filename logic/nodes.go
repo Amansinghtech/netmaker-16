@@ -7,7 +7,7 @@ import (
 	"sort"
 	"time"
 
-	validator "github.com/go-playground/validator/v10"
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/gravitl/netmaker/database"
 	"github.com/gravitl/netmaker/logger"
@@ -186,9 +186,7 @@ func DeleteNodeByID(node *models.Node, exterminate bool) error {
 		}
 	}
 	if err = database.DeleteRecord(database.NODES_TABLE_NAME, key); err != nil {
-		if !database.IsEmptyRecord(err) {
-			return err
-		}
+		return err
 	}
 
 	if servercfg.IsDNSMode() {
@@ -214,7 +212,6 @@ func DeleteNodeByID(node *models.Node, exterminate bool) error {
 	if node.IsServer == "yes" {
 		return removeLocalServer(node)
 	}
-
 	return nil
 }
 
@@ -251,20 +248,6 @@ func ValidateNode(node *models.Node, isUpdate bool) error {
 	err := v.Struct(node)
 
 	return err
-}
-
-// IsFailoverPresent - checks if a node is marked as a failover in given network
-func IsFailoverPresent(network string) bool {
-	netNodes, err := GetNetworkNodes(network)
-	if err != nil {
-		return false
-	}
-	for i := range netNodes {
-		if netNodes[i].Failover == "yes" {
-			return true
-		}
-	}
-	return false
 }
 
 // CreateNode - creates a node in database
@@ -335,7 +318,7 @@ func CreateNode(node *models.Node) error {
 	if err != nil {
 		return err
 	}
-	CheckZombies(node)
+	// CheckZombies(node)
 
 	nodebytes, err := json.Marshal(&node)
 	if err != nil {
@@ -497,7 +480,6 @@ func SetNodeDefaults(node *models.Node) {
 	node.SetDefaultIsHub()
 	node.SetDefaultConnected()
 	node.SetDefaultACL()
-	node.SetDefaultFailover()
 }
 
 // GetRecordKey - get record key
@@ -739,21 +721,6 @@ func findNode(ip string) (*models.Node, error) {
 		}
 	}
 	return nil, errors.New("node not found")
-}
-
-// GetNetworkIngresses - gets the gateways of a network
-func GetNetworkIngresses(network string) ([]models.Node, error) {
-	var ingresses []models.Node
-	netNodes, err := GetNetworkNodes(network)
-	if err != nil {
-		return []models.Node{}, err
-	}
-	for i := range netNodes {
-		if netNodes[i].IsIngressGateway == "yes" {
-			ingresses = append(ingresses, netNodes[i])
-		}
-	}
-	return ingresses, nil
 }
 
 // == PRO ==

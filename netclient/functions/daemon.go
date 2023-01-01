@@ -2,8 +2,13 @@ package functions
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"strings"
@@ -16,10 +21,12 @@ import (
 	"github.com/gravitl/netmaker/mq"
 	"github.com/gravitl/netmaker/netclient/auth"
 	"github.com/gravitl/netmaker/netclient/config"
+	"github.com/gravitl/netmaker/netclient/daemon"
 	"github.com/gravitl/netmaker/netclient/global_settings"
 	"github.com/gravitl/netmaker/netclient/local"
 	"github.com/gravitl/netmaker/netclient/ncutils"
 	"github.com/gravitl/netmaker/netclient/wireguard"
+	ssl "github.com/gravitl/netmaker/tls"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
@@ -66,18 +73,12 @@ func Daemon() error {
 			cancel()
 			logger.Log(0, "shutting down netclient daemon")
 			wg.Wait()
-			if mqclient != nil {
-				mqclient.Disconnect(250)
-			}
 			logger.Log(0, "shutdown complete")
 			return nil
 		case <-reset:
 			logger.Log(0, "received reset")
 			cancel()
 			wg.Wait()
-			if mqclient != nil {
-				mqclient.Disconnect(250)
-			}
 			logger.Log(0, "restarting daemon")
 			cancel = startGoRoutines(&wg)
 		}
@@ -93,13 +94,11 @@ func startGoRoutines(wg *sync.WaitGroup) context.CancelFunc {
 		cfg := config.ClientConfig{}
 		cfg.Network = network
 		cfg.ReadConfig()
-		if cfg.Node.Connected == "yes" {
-			if err := wireguard.ApplyConf(&cfg.Node, cfg.Node.Interface, ncutils.GetNetclientPathSpecific()+cfg.Node.Interface+".conf"); err != nil {
-				logger.Log(0, "failed to start ", cfg.Node.Interface, "wg interface", err.Error())
-			}
-			if cfg.PublicIPService != "" {
-				global_settings.PublicIPServices[network] = cfg.PublicIPService
-			}
+		if err := wireguard.ApplyConf(&cfg.Node, cfg.Node.Interface, ncutils.GetNetclientPathSpecific()+cfg.Node.Interface+".conf"); err != nil {
+			logger.Log(0, "failed to start ", cfg.Node.Interface, "wg interface", err.Error())
+		}
+		if cfg.PublicIPService != "" {
+			global_settings.PublicIPServices[network] = cfg.PublicIPService
 		}
 
 		server := cfg.Server.Server
@@ -202,19 +201,47 @@ func messageQueue(ctx context.Context, wg *sync.WaitGroup, cfg *config.ClientCon
 	logger.Log(0, "shutting down message queue for server", cfg.Server.Server)
 }
 
+// NewTLSConf sets up tls configuration to connect to broker securely
+func NewTLSConfig(server string) (*tls.Config, error) {
+	file := ncutils.GetNetclientServerPath(server) + ncutils.GetSeparator() + "root.pem"
+	certpool := x509.NewCertPool()
+	ca, err := os.ReadFile(file)
+	if err != nil {
+		logger.Log(0, "could not read CA file", err.Error())
+	}
+	ok := certpool.AppendCertsFromPEM(ca)
+	if !ok {
+		logger.Log(0, "failed to append cert")
+	}
+	clientKeyPair, err := tls.LoadX509KeyPair(ncutils.GetNetclientServerPath(server)+ncutils.GetSeparator()+"client.pem", ncutils.GetNetclientPath()+ncutils.GetSeparator()+"client.key")
+	if err != nil {
+		logger.Log(0, "could not read client cert/key", err.Error())
+		return nil, err
+	}
+	certs := []tls.Certificate{clientKeyPair}
+	return &tls.Config{
+		RootCAs:            certpool,
+		ClientAuth:         tls.NoClientCert,
+		ClientCAs:          nil,
+		Certificates:       certs,
+		InsecureSkipVerify: false,
+	}, nil
+
+}
+
 // func setMQTTSingenton creates a connection to broker for single use (ie to publish a message)
 // only to be called from cli (eg. connect/disconnect, join, leave) and not from daemon ---
 func setupMQTTSingleton(cfg *config.ClientConfig) error {
 	opts := mqtt.NewClientOptions()
 	server := cfg.Server.Server
 	port := cfg.Server.MQPort
-	pass, err := os.ReadFile(ncutils.GetNetclientPathSpecific() + "secret-" + cfg.Network)
+	opts.AddBroker("ssl://" + server + ":" + port)
+	tlsConfig, err := NewTLSConfig(server)
 	if err != nil {
-		return fmt.Errorf("could not read secrets file %w", err)
+		logger.Log(0, "failed to get TLS config for", server, err.Error())
+		return err
 	}
-	opts.AddBroker("wss://" + server + ":" + port)
-	opts.SetUsername(cfg.Node.ID)
-	opts.SetPassword(string(pass))
+	opts.SetTLSConfig(tlsConfig)
 	mqclient = mqtt.NewClient(opts)
 	var connecterr error
 	opts.SetClientID(ncutils.MakeRandomString(23))
@@ -235,13 +262,13 @@ func setupMQTT(cfg *config.ClientConfig) error {
 	opts := mqtt.NewClientOptions()
 	server := cfg.Server.Server
 	port := cfg.Server.MQPort
-	pass, err := os.ReadFile(ncutils.GetNetclientPathSpecific() + "secret-" + cfg.Network)
+	opts.AddBroker("ssl://" + server + ":" + port)
+	tlsConfig, err := NewTLSConfig(server)
 	if err != nil {
-		return fmt.Errorf("could not read secrets file %w", err)
+		logger.Log(0, "failed to get TLS config for", server, err.Error())
+		return err
 	}
-	opts.AddBroker(fmt.Sprintf("wss://%s:%s", server, port))
-	opts.SetUsername(cfg.Node.ID)
-	opts.SetPassword(string(pass))
+	opts.SetTLSConfig(tlsConfig)
 	opts.SetClientID(ncutils.MakeRandomString(23))
 	opts.SetDefaultPublishHandler(All)
 	opts.SetAutoReconnect(true)
@@ -284,11 +311,27 @@ func setupMQTT(cfg *config.ClientConfig) error {
 		}
 	}
 	if connecterr != nil {
-		logger.Log(0, "failed to establish connection to broker: ", connecterr.Error())
-		return connecterr
+		reRegisterWithServer(cfg)
+		//try after re-registering
+		if token := mqclient.Connect(); !token.WaitTimeout(30*time.Second) || token.Error() != nil {
+			return errors.New("unable to connect to broker")
+		}
 	}
 
 	return nil
+}
+
+func reRegisterWithServer(cfg *config.ClientConfig) {
+	logger.Log(0, "connection issue detected.. attempt connection with new certs and broker information")
+	key, err := ssl.ReadKeyFromFile(ncutils.GetNetclientPath() + ncutils.GetSeparator() + "client.key")
+	if err != nil {
+		_, *key, err = ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			log.Fatal("could not generate new key")
+		}
+	}
+	RegisterWithServer(key, cfg)
+	daemon.Restart()
 }
 
 // publishes a message to server to update peers on this peer's behalf

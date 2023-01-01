@@ -218,7 +218,6 @@ type ServerConfig struct {
 	Version     string `yaml:"version"`
 	MQPort      string `yaml:"mqport"`
 	Server      string `yaml:"server"`
-	Is_EE       bool   `yaml:"isee"`
 }
 
 // User.NameInCharset - returns if name is in charset below or not

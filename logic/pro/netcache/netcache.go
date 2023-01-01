@@ -21,7 +21,7 @@ type CValue struct {
 	Expiration time.Time `json:"expiration"`
 }
 
-var ErrExpired = fmt.Errorf("expired")
+var errExpired = fmt.Errorf("expired")
 
 // Set - sets a value to a key in db
 func Set(k string, newValue *CValue) error {
@@ -45,7 +45,7 @@ func Get(k string) (*CValue, error) {
 		return nil, err
 	}
 	if time.Now().After(entry.Expiration) {
-		return nil, ErrExpired
+		return nil, errExpired
 	}
 
 	return &entry, nil

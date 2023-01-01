@@ -32,7 +32,7 @@ func TestHasAdmin(t *testing.T) {
 	})
 	t.Run("No admin user", func(t *testing.T) {
 		var user = models.User{"noadmin", "password", nil, false, nil}
-		err := logic.CreateUser(&user)
+		_, err := logic.CreateUser(user)
 		assert.Nil(t, err)
 		found, err := logic.HasAdmin()
 		assert.Nil(t, err)
@@ -40,7 +40,7 @@ func TestHasAdmin(t *testing.T) {
 	})
 	t.Run("admin user", func(t *testing.T) {
 		var user = models.User{"admin", "password", nil, true, nil}
-		err := logic.CreateUser(&user)
+		_, err := logic.CreateUser(user)
 		assert.Nil(t, err)
 		found, err := logic.HasAdmin()
 		assert.Nil(t, err)
@@ -48,7 +48,7 @@ func TestHasAdmin(t *testing.T) {
 	})
 	t.Run("multiple admins", func(t *testing.T) {
 		var user = models.User{"admin1", "password", nil, true, nil}
-		 err := logic.CreateUser(&user)
+		_, err := logic.CreateUser(user)
 		assert.Nil(t, err)
 		found, err := logic.HasAdmin()
 		assert.Nil(t, err)
@@ -61,11 +61,12 @@ func TestCreateUser(t *testing.T) {
 	deleteAllUsers()
 	user := models.User{"admin", "password", nil, true, nil}
 	t.Run("NoUser", func(t *testing.T) {
-		err := logic.CreateUser(&user)
+		admin, err := logic.CreateUser(user)
 		assert.Nil(t, err)
+		assert.Equal(t, user.UserName, admin.UserName)
 	})
 	t.Run("UserExists", func(t *testing.T) {
-		err := logic.CreateUser(&user)
+		_, err := logic.CreateUser(user)
 		assert.NotNil(t, err)
 		assert.EqualError(t, err, "user exists")
 	})
@@ -78,14 +79,16 @@ func TestCreateAdmin(t *testing.T) {
 	t.Run("NoAdmin", func(t *testing.T) {
 		user.UserName = "admin"
 		user.Password = "password"
-		err := logic.CreateAdmin(&user)
+		admin, err := logic.CreateAdmin(user)
 		assert.Nil(t, err)
+		assert.Equal(t, user.UserName, admin.UserName)
 	})
 	t.Run("AdminExists", func(t *testing.T) {
 		user.UserName = "admin2"
 		user.Password = "password1"
-		err := logic.CreateAdmin(&user)
+		admin, err := logic.CreateAdmin(user)
 		assert.EqualError(t, err, "admin user already exists")
+		assert.Equal(t, admin, models.User{})
 	})
 }
 
@@ -99,7 +102,7 @@ func TestDeleteUser(t *testing.T) {
 	})
 	t.Run("Existing User", func(t *testing.T) {
 		user := models.User{"admin", "password", nil, true, nil}
-		logic.CreateUser(&user)
+		logic.CreateUser(user)
 		deleted, err := logic.DeleteUser("admin")
 		assert.Nil(t, err)
 		assert.True(t, deleted)
@@ -112,44 +115,44 @@ func TestValidateUser(t *testing.T) {
 	t.Run("Valid Create", func(t *testing.T) {
 		user.UserName = "admin"
 		user.Password = "validpass"
-		err := logic.ValidateUser(&user)
+		err := logic.ValidateUser(user)
 		assert.Nil(t, err)
 	})
 	t.Run("Valid Update", func(t *testing.T) {
 		user.UserName = "admin"
 		user.Password = "password"
-		err := logic.ValidateUser(&user)
+		err := logic.ValidateUser(user)
 		assert.Nil(t, err)
 	})
 	t.Run("Invalid UserName", func(t *testing.T) {
 		t.Skip()
 		user.UserName = "*invalid"
-		err := logic.ValidateUser(&user)
+		err := logic.ValidateUser(user)
 		assert.Error(t, err)
 		//assert.Contains(t, err.Error(), "Field validation for 'UserName' failed")
 	})
 	t.Run("Short UserName", func(t *testing.T) {
 		t.Skip()
 		user.UserName = "1"
-		err := logic.ValidateUser(&user)
+		err := logic.ValidateUser(user)
 		assert.NotNil(t, err)
 		//assert.Contains(t, err.Error(), "Field validation for 'UserName' failed")
 	})
 	t.Run("Empty UserName", func(t *testing.T) {
 		t.Skip()
 		user.UserName = ""
-		err := logic.ValidateUser(&user)
+		err := logic.ValidateUser(user)
 		assert.EqualError(t, err, "some string")
 		//assert.Contains(t, err.Error(), "Field validation for 'UserName' failed")
 	})
 	t.Run("EmptyPassword", func(t *testing.T) {
 		user.Password = ""
-		err := logic.ValidateUser(&user)
+		err := logic.ValidateUser(user)
 		assert.EqualError(t, err, "Key: 'User.Password' Error:Field validation for 'Password' failed on the 'required' tag")
 	})
 	t.Run("ShortPassword", func(t *testing.T) {
 		user.Password = "123"
-		err := logic.ValidateUser(&user)
+		err := logic.ValidateUser(user)
 		assert.EqualError(t, err, "Key: 'User.Password' Error:Field validation for 'Password' failed on the 'min' tag")
 	})
 }
@@ -164,8 +167,25 @@ func TestGetUser(t *testing.T) {
 	})
 	t.Run("UserExisits", func(t *testing.T) {
 		user := models.User{"admin", "password", nil, true, nil}
-		logic.CreateUser(&user)
+		logic.CreateUser(user)
 		admin, err := logic.GetUser("admin")
+		assert.Nil(t, err)
+		assert.Equal(t, user.UserName, admin.UserName)
+	})
+}
+
+func TestGetUserInternal(t *testing.T) {
+	database.InitializeDatabase()
+	deleteAllUsers()
+	t.Run("NonExistantUser", func(t *testing.T) {
+		admin, err := GetUserInternal("admin")
+		assert.EqualError(t, err, "could not find any records")
+		assert.Equal(t, "", admin.UserName)
+	})
+	t.Run("UserExisits", func(t *testing.T) {
+		user := models.User{"admin", "password", nil, true, nil}
+		logic.CreateUser(user)
+		admin, err := GetUserInternal("admin")
 		assert.Nil(t, err)
 		assert.Equal(t, user.UserName, admin.UserName)
 	})
@@ -181,14 +201,14 @@ func TestGetUsers(t *testing.T) {
 	})
 	t.Run("UserExisits", func(t *testing.T) {
 		user := models.User{"admin", "password", nil, true, nil}
-		logic.CreateUser(&user)
+		logic.CreateUser(user)
 		admins, err := logic.GetUsers()
 		assert.Nil(t, err)
 		assert.Equal(t, user.UserName, admins[0].UserName)
 	})
 	t.Run("MulipleUsers", func(t *testing.T) {
 		user := models.User{"user", "password", nil, true, nil}
-		logic.CreateUser(&user)
+		logic.CreateUser(user)
 		admins, err := logic.GetUsers()
 		assert.Nil(t, err)
 		for _, u := range admins {
@@ -208,14 +228,14 @@ func TestUpdateUser(t *testing.T) {
 	user := models.User{"admin", "password", nil, true, nil}
 	newuser := models.User{"hello", "world", []string{"wirecat, netmaker"}, true, []string{}}
 	t.Run("NonExistantUser", func(t *testing.T) {
-		admin, err := logic.UpdateUser(&newuser, &user)
+		admin, err := logic.UpdateUser(newuser, user)
 		assert.EqualError(t, err, "could not find any records")
 		assert.Equal(t, "", admin.UserName)
 	})
 
 	t.Run("UserExists", func(t *testing.T) {
-		logic.CreateUser(&user)
-		admin, err := logic.UpdateUser(&newuser, &user)
+		logic.CreateUser(user)
+		admin, err := logic.UpdateUser(newuser, user)
 		assert.Nil(t, err)
 		assert.Equal(t, newuser.UserName, admin.UserName)
 	})
@@ -272,7 +292,7 @@ func TestVerifyAuthRequest(t *testing.T) {
 	})
 	t.Run("Non-Admin", func(t *testing.T) {
 		user := models.User{"nonadmin", "somepass", nil, false, []string{}}
-		logic.CreateUser(&user)
+		logic.CreateUser(user)
 		authRequest := models.UserAuthParams{"nonadmin", "somepass"}
 		jwt, err := logic.VerifyAuthRequest(authRequest)
 		assert.NotNil(t, jwt)
@@ -280,7 +300,7 @@ func TestVerifyAuthRequest(t *testing.T) {
 	})
 	t.Run("WrongPassword", func(t *testing.T) {
 		user := models.User{"admin", "password", nil, false, []string{}}
-		logic.CreateUser(&user)
+		logic.CreateUser(user)
 		authRequest := models.UserAuthParams{"admin", "badpass"}
 		jwt, err := logic.VerifyAuthRequest(authRequest)
 		assert.Equal(t, "", jwt)

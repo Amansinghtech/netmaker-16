@@ -217,9 +217,10 @@ func IsUserClientAllowed(clients []models.ExtClient, network, userID, clientID s
 
 // IsUserNetAdmin - checks if a user is a net admin or not
 func IsUserNetAdmin(network, userID string) bool {
+	var isAdmin bool
 	user, err := GetNetworkUser(network, promodels.NetworkUserID(userID))
 	if err != nil {
-		return false
+		return isAdmin
 	}
 	return user.AccessLevel == NET_ADMIN
 }

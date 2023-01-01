@@ -199,7 +199,7 @@ func JoinNetwork(cfg *config.ClientConfig, privateKey string) error {
 		return err
 	}
 	if cfg.Node.Password == "" {
-		cfg.Node.Password = logic.GenPassWord()
+		cfg.Node.Password = logic.GenKey()
 	}
 	//check if ListenPort was set on command line
 	if cfg.Node.ListenPort != 0 {
@@ -236,14 +236,6 @@ func JoinNetwork(cfg *config.ClientConfig, privateKey string) error {
 			cfg.Node.LocalAddress = intIP
 		} else {
 			logger.Log(1, "network:", cfg.Network, "error retrieving private address: ", err.Error())
-		}
-	}
-	if len(cfg.Node.Interfaces) == 0 {
-		ip, err := getInterfaces()
-		if err != nil {
-			logger.Log(0, "failed to retrive local interfaces", err.Error())
-		} else {
-			cfg.Node.Interfaces = *ip
 		}
 	}
 
@@ -370,6 +362,10 @@ func JoinNetwork(cfg *config.ClientConfig, privateKey string) error {
 
 	local.SetNetmakerDomainRoute(cfg.Server.API)
 	cfg.Node = node
+	if err := Register(cfg); err != nil {
+		return err
+	}
+
 	logger.Log(0, "starting wireguard")
 	err = wireguard.InitWireguard(&node, privateKey, nodeGET.Peers[:])
 	if err != nil {

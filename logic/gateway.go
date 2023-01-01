@@ -10,7 +10,6 @@ import (
 	"github.com/gravitl/netmaker/database"
 	"github.com/gravitl/netmaker/logger"
 	"github.com/gravitl/netmaker/models"
-	"github.com/gravitl/netmaker/servercfg"
 )
 
 // CreateEgressGateway - creates an egress gateway
@@ -47,10 +46,6 @@ func CreateEgressGateway(gateway models.EgressGatewayRequest) (models.Node, erro
 	postUpCmd := ""
 	postDownCmd := ""
 	ipv4, ipv6 := getNetworkProtocols(gateway.Ranges)
-	// no support for ipv6 and ip6tables in netmaker container
-	if node.IsServer == "yes" {
-		ipv6 = false
-	}
 	logger.Log(3, "creating egress gateway firewall in use is '", node.FirewallInUse, "'")
 	if node.OS == "linux" {
 		switch node.FirewallInUse {
@@ -92,12 +87,12 @@ func CreateEgressGateway(gateway models.EgressGatewayRequest) (models.Node, erro
 	}
 	if node.PostUp != "" {
 		if !strings.Contains(node.PostUp, postUpCmd) {
-			postUpCmd = node.PostUp + postUpCmd
+			postUpCmd = node.PostUp + " ; " + postUpCmd
 		}
 	}
 	if node.PostDown != "" {
 		if !strings.Contains(node.PostDown, postDownCmd) {
-			postDownCmd = node.PostDown + postDownCmd
+			postDownCmd = node.PostDown + " ; " + postDownCmd
 		}
 	}
 
@@ -177,20 +172,19 @@ func DeleteEgressGateway(network, nodeid string) (models.Node, error) {
 }
 
 // CreateIngressGateway - creates an ingress gateway
-func CreateIngressGateway(netid string, nodeid string, failover bool) (models.Node, error) {
+func CreateIngressGateway(netid string, nodeid string) (models.Node, error) {
 
 	var postUpCmd, postDownCmd string
 	node, err := GetNodeByID(nodeid)
-
-	if err != nil {
-		return models.Node{}, err
-	}
-
 	if node.OS != "linux" { // add in darwin later
 		return models.Node{}, errors.New(node.OS + " is unsupported for ingress gateways")
 	}
 	if node.OS == "linux" && node.FirewallInUse == models.FIREWALL_NONE {
 		return models.Node{}, errors.New("firewall is not supported for ingress gateways")
+	}
+
+	if err != nil {
+		return models.Node{}, err
 	}
 
 	network, err := GetParentNetwork(netid)
@@ -204,10 +198,6 @@ func CreateIngressGateway(netid string, nodeid string, failover bool) (models.No
 	node.IngressGatewayRange = network.AddressRange
 	node.IngressGatewayRange6 = network.AddressRange6
 	ipv4, ipv6 := getNetworkProtocols(cidrs)
-	// no support for ipv6 and ip6tables in netmaker container
-	if node.IsServer == "yes" {
-		ipv6 = false
-	}
 	logger.Log(3, "creating ingress gateway firewall in use is '", node.FirewallInUse, "'")
 	switch node.FirewallInUse {
 	case models.FIREWALL_NFTABLES:
@@ -234,9 +224,7 @@ func CreateIngressGateway(netid string, nodeid string, failover bool) (models.No
 	node.PostUp = postUpCmd
 	node.PostDown = postDownCmd
 	node.UDPHolePunch = "no"
-	if failover && servercfg.Is_EE {
-		node.Failover = "yes"
-	}
+
 	data, err := json.Marshal(&node)
 	if err != nil {
 		return models.Node{}, err
@@ -250,29 +238,26 @@ func CreateIngressGateway(netid string, nodeid string, failover bool) (models.No
 }
 
 // DeleteIngressGateway - deletes an ingress gateway
-func DeleteIngressGateway(networkName string, nodeid string) (models.Node, bool, error) {
+func DeleteIngressGateway(networkName string, nodeid string) (models.Node, error) {
 
 	node, err := GetNodeByID(nodeid)
 	if err != nil {
-		return models.Node{}, false, err
+		return models.Node{}, err
 	}
 	network, err := GetParentNetwork(networkName)
 	if err != nil {
-		return models.Node{}, false, err
+		return models.Node{}, err
 	}
 	// delete ext clients belonging to ingress gateway
 	if err = DeleteGatewayExtClients(node.ID, networkName); err != nil {
-		return models.Node{}, false, err
+		return models.Node{}, err
 	}
 	logger.Log(3, "deleting ingress gateway")
-	wasFailover := node.Failover == "yes"
-	if node.IsServer != "yes" {
-		node.UDPHolePunch = network.DefaultUDPHolePunch
-	}
+
+	node.UDPHolePunch = network.DefaultUDPHolePunch
 	node.LastModified = time.Now().Unix()
 	node.IsIngressGateway = "no"
 	node.IngressGatewayRange = ""
-	node.Failover = "no"
 
 	// default to removing postup and postdown
 	node.PostUp = ""
@@ -289,14 +274,14 @@ func DeleteIngressGateway(networkName string, nodeid string) (models.Node, bool,
 
 	data, err := json.Marshal(&node)
 	if err != nil {
-		return models.Node{}, false, err
+		return models.Node{}, err
 	}
 	err = database.Insert(node.ID, string(data), database.NODES_TABLE_NAME)
 	if err != nil {
-		return models.Node{}, wasFailover, err
+		return models.Node{}, err
 	}
 	err = SetNetworkNodesLastModified(networkName)
-	return node, wasFailover, err
+	return node, err
 }
 
 // DeleteGatewayExtClients - deletes ext clients based on gateway (mac) of ingress node and network
@@ -325,7 +310,7 @@ func firewallNFTCommandsCreateIngress(networkInterface string) (string, string) 
 	postUp += "nft add rule ip filter FORWARD oifname " + networkInterface + " counter accept ; "
 	postUp += "nft add table nat ; "
 	postUp += "nft add chain nat postrouting ; "
-	postUp += "nft add rule ip nat postrouting oifname " + networkInterface + " counter masquerade ; "
+	postUp += "nft add rule ip nat postrouting oifname " + networkInterface + " counter masquerade"
 
 	// doesn't remove potentially empty tables or chains
 	postDown := "nft flush table filter ; "

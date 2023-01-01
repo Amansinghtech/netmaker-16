@@ -37,11 +37,6 @@ elif [ "${OS}" = "FreeBSD" ]; then
 	dependencies="wireguard wget"
 	update_cmd='pkg update'
 	install_cmd='pkg install -y'
-elif [ -f /etc/turris-version ]; then
-	dependencies="wireguard-tools bash"
-	OS="TurrisOS"
-	update_cmd='opkg update'	
-	install_cmd='opkg install'
 elif [ -f /etc/openwrt_release ]; then
 	dependencies="wireguard-tools bash"
 	OS="OpenWRT"
@@ -80,7 +75,7 @@ while [ -n "$1" ]; do
 			fi
 		fi	
 	else
-		if [ "${OS}" = "OpenWRT" ] || [ "${OS}" = "TurrisOS" ]; then
+		if [ "${OS}" = "OpenWRT" ]; then
 			is_installed=$(opkg list-installed $1 | grep $1)
 		else
 			is_installed=$(dpkg-query -W --showformat='${Status}\n' $1 | grep "install ok installed")
@@ -91,7 +86,7 @@ while [ -n "$1" ]; do
 			echo "    " $1 is not installed. Attempting install.
 			${install_cmd} $1
 			sleep 5
-			if [ "${OS}" = "OpenWRT" ] || [ "${OS}" = "TurrisOS" ]; then
+			if [ "${OS}" = "OpenWRT" ]; then
 				is_installed=$(opkg list-installed $1 | grep $1)
 			else
 				is_installed=$(dpkg-query -W --showformat='${Status}\n' $1 | grep "install ok installed")
@@ -148,18 +143,8 @@ case $(uname | tr A-Z a-z) in
 			arm*)
 				dist=netclient-$CPU_ARCH
 			;;
-			mipsle)
+            mipsle)
                 dist=netclient-mipsle
-			;;
-			mips)
-			    #If binary in the below condition is not compatible with your hardware, retry with other netclient-mips* binaries.
-				if [[ `printf '\0\1' | hexdump -e '/2 "%04x"'` -eq 0100 ]]; then
-					#Little Endian, tested and confirmed in GL-MT1300 OS "OpenWrt 19.07.8"
-					dist=netclient-mipsle-softfloat
-				else
-					#Big Endian, tested and confirmed in DSL-2750U OS "OpenWrt 22.03.2"
-					dist=netclient-mips-softfloat
-				fi
 			;;
 			*)
 				fatal "$CPU_ARCH : cpu architecture not supported"
@@ -204,7 +189,7 @@ echo "Binary = $dist"
 
 url="https://github.com/gravitl/netmaker/releases/download/$VERSION/$dist"
 curl_opts='-nv'
-if [ "${OS}" = "OpenWRT" ] || [ "${OS}" = "TurrisOS" ]; then
+if [ "${OS}" = "OpenWRT" ]; then
 	curl_opts='-q'
 fi
 
@@ -219,7 +204,7 @@ fi
 chmod +x netclient
 
 EXTRA_ARGS=""
-if [ "${OS}" = "OpenWRT" ] || [ "${OS}" = "TurrisOS" ]; then
+if [  "${OS}" = "OpenWRT" ]; then
 	EXTRA_ARGS="--daemon=off"
 fi
 
@@ -240,20 +225,9 @@ if [ "${OS}" = "FreeBSD" ]; then
   fi
 fi
 
-if [ "${OS}" = "OpenWRT" ] || [ "${OS}" = "TurrisOS" ]; then
+if [ "${OS}" = "OpenWRT" ]; then
 	mv ./netclient /sbin/netclient
-
-	if [ "${OS}" = "TurrisOS" ]; then
-		url="https://raw.githubusercontent.com/gravitl/netmaker/$VERSION/scripts/openwrt-daemon.sh"
-		if curl --output /dev/null --silent --head --fail $url; then
-			wget $curl_opts -O netclient.service.tmp $url
-		else
-			wget $curl_opts -O netclient.service.tmp https://raw.githubusercontent.com/gravitl/netmaker/master/scripts/openwrt-daemon.sh
-		fi
-	elif [ "${OS}" = "OpenWRT" ] && [ "$CPU_ARCH" = "mips" ]; then
-		wget $curl_opts -O netclient.service.tmp https://raw.githubusercontent.com/gravitl/netmaker/master/scripts/openwrt-daemon.sh
-	else
-		cat << 'END_OF_FILE' > ./netclient.service.tmp
+	cat << 'END_OF_FILE' > ./netclient.service.tmp
 #!/bin/sh /etc/rc.common
 
 EXTRA_COMMANDS="status"
@@ -297,7 +271,6 @@ status() {
 }
 
 END_OF_FILE
-	fi
 	mv ./netclient.service.tmp /etc/init.d/netclient
 	chmod +x /etc/init.d/netclient
 	/etc/init.d/netclient enable
@@ -305,3 +278,4 @@ END_OF_FILE
 else 
 	rm -f netclient
 fi
+

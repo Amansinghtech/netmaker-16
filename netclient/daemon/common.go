@@ -14,10 +14,10 @@ import (
 // InstallDaemon - Calls the correct function to install the netclient as a daemon service on the given operating system.
 func InstallDaemon() error {
 
-	runtimeOS := runtime.GOOS
+	os := runtime.GOOS
 	var err error
 
-	switch runtimeOS {
+	switch os {
 	case "windows":
 		err = SetupWindowsDaemon()
 	case "darwin":
@@ -54,9 +54,9 @@ func Restart() error {
 
 // Start - starts system daemon
 func Start() error {
-	runtimeOS := runtime.GOOS
+	os := runtime.GOOS
 	var err error
-	switch runtimeOS {
+	switch os {
 	case "windows":
 		RestartWindowsDaemon()
 	case "darwin":
@@ -73,12 +73,12 @@ func Start() error {
 
 // Stop - stops a system daemon
 func Stop() error {
-	runtimeOS := runtime.GOOS
+	os := runtime.GOOS
 	var err error
 
 	time.Sleep(time.Second)
 
-	switch runtimeOS {
+	switch os {
 	case "windows":
 		RunWinSWCMD("stop")
 	case "darwin":

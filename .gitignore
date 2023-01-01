@@ -3,7 +3,6 @@ netmaker-arm
 netmaker-arm64
 netmaker-32
 netmaker-amd64
-cli/nmctl
 netclient/netclient
 netclient/netclient.syso
 netclient/build
@@ -23,4 +22,3 @@ data/
 .vscode/
 .idea/
 netmaker.exe
-netmaker.code-workspace

@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/gravitl/netmaker/auth"
+	"github.com/gravitl/netmaker/database"
 	"github.com/gravitl/netmaker/logger"
 	"github.com/gravitl/netmaker/logic"
 	"github.com/gravitl/netmaker/models"
@@ -135,6 +136,20 @@ func hasAdmin(w http.ResponseWriter, r *http.Request) {
 
 }
 
+// GetUserInternal - gets an internal user
+func GetUserInternal(username string) (models.User, error) {
+
+	var user models.User
+	record, err := database.FetchRecord(database.USERS_TABLE_NAME, username)
+	if err != nil {
+		return user, err
+	}
+	if err = json.Unmarshal([]byte(record), &user); err != nil {
+		return models.User{}, err
+	}
+	return user, err
+}
+
 // swagger:route GET /api/users/{username} user getUser
 //
 // Get an individual user.
@@ -220,7 +235,7 @@ func createAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = logic.CreateAdmin(&admin)
+	admin, err = logic.CreateAdmin(admin)
 	if err != nil {
 		logger.Log(0, admin.UserName, "failed to create admin: ",
 			err.Error())
@@ -255,7 +270,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = logic.CreateUser(&user)
+	user, err = logic.CreateUser(user)
 	if err != nil {
 		logger.Log(0, user.UserName, "error creating new user: ",
 			err.Error())
@@ -280,9 +295,10 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 func updateUserNetworks(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	var params = mux.Vars(r)
+	var user models.User
 	// start here
 	username := params["username"]
-	user, err := logic.GetUser(username)
+	user, err := GetUserInternal(username)
 	if err != nil {
 		logger.Log(0, username,
 			"failed to update user networks: ", err.Error())
@@ -329,16 +345,17 @@ func updateUserNetworks(w http.ResponseWriter, r *http.Request) {
 func updateUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	var params = mux.Vars(r)
+	var user models.User
 	// start here
 	username := params["username"]
-	user, err := logic.GetUser(username)
+	user, err := GetUserInternal(username)
 	if err != nil {
 		logger.Log(0, username,
 			"failed to update user info: ", err.Error())
 		logic.ReturnErrorResponse(w, r, logic.FormatError(err, "internal"))
 		return
 	}
-	if auth.IsOauthUser(user) == nil {
+	if auth.IsOauthUser(&user) == nil {
 		err := fmt.Errorf("cannot update user info for oauth user %s", username)
 		logger.Log(0, err.Error())
 		logic.ReturnErrorResponse(w, r, logic.FormatError(err, "forbidden"))
@@ -354,7 +371,7 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userchange.Networks = nil
-	user, err = logic.UpdateUser(&userchange, user)
+	user, err = logic.UpdateUser(userchange, user)
 	if err != nil {
 		logger.Log(0, username,
 			"failed to update user info: ", err.Error())
@@ -379,14 +396,15 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 func updateUserAdm(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	var params = mux.Vars(r)
+	var user models.User
 	// start here
 	username := params["username"]
-	user, err := logic.GetUser(username)
+	user, err := GetUserInternal(username)
 	if err != nil {
 		logic.ReturnErrorResponse(w, r, logic.FormatError(err, "internal"))
 		return
 	}
-	if auth.IsOauthUser(user) != nil {
+	if auth.IsOauthUser(&user) != nil {
 		err := fmt.Errorf("cannot update user info for oauth user %s", username)
 		logger.Log(0, err.Error())
 		logic.ReturnErrorResponse(w, r, logic.FormatError(err, "forbidden"))
@@ -405,7 +423,7 @@ func updateUserAdm(w http.ResponseWriter, r *http.Request) {
 		logger.Log(0, username, "not an admin user")
 		logic.ReturnErrorResponse(w, r, logic.FormatError(errors.New("not a admin user"), "badrequest"))
 	}
-	user, err = logic.UpdateUser(&userchange, user)
+	user, err = logic.UpdateUser(userchange, user)
 	if err != nil {
 		logger.Log(0, username,
 			"failed to update user (admin) info: ", err.Error())

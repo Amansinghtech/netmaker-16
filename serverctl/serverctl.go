@@ -127,37 +127,14 @@ func setNetworkDefaults() error {
 	if err != nil && !database.IsEmptyRecord(err) {
 		return err
 	}
-	for _, network := range networks {
-		if err = pro.InitializeNetworkUsers(network.NetID); err != nil {
-			logger.Log(0, "could not initialize NetworkUsers on network", network.NetID)
+	for _, net := range networks {
+		if err = pro.InitializeNetworkUsers(net.NetID); err != nil {
+			logger.Log(0, "could not initialize NetworkUsers on network", net.NetID)
 		}
-		pro.AddProNetDefaults(&network)
-		update := false
-		newNet := network
-		if strings.Contains(network.NetID, ".") {
-			newNet.NetID = strings.ReplaceAll(network.NetID, ".", "")
-			newNet.DefaultInterface = strings.ReplaceAll(network.DefaultInterface, ".", "")
-			update = true
-		}
-		if strings.ContainsAny(network.NetID, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
-			newNet.NetID = strings.ToLower(network.NetID)
-			newNet.DefaultInterface = strings.ToLower(network.DefaultInterface)
-			update = true
-		}
-		if update {
-			newNet.SetDefaults()
-			if err := logic.SaveNetwork(&newNet); err != nil {
-				logger.Log(0, "error saving networks during initial update:", err.Error())
-			}
-			if err := logic.DeleteNetwork(network.NetID); err != nil {
-				logger.Log(0, "error deleting old network:", err.Error())
-			}
-		} else {
-			network.SetDefaults()
-			_, _, _, _, _, _, err = logic.UpdateNetwork(&network, &network)
-			if err != nil {
-				logger.Log(0, "could not set defaults on network", network.NetID)
-			}
+		pro.AddProNetDefaults(&net)
+		_, _, _, _, _, _, err = logic.UpdateNetwork(&net, &net)
+		if err != nil {
+			logger.Log(0, "could not set defaults on network", net.NetID)
 		}
 	}
 	return nil
@@ -173,7 +150,7 @@ func setUserDefaults() error {
 		if err != nil {
 			logger.Log(0, "could not update user", updateUser.UserName)
 		}
-		logic.SetUserDefaults(updateUser)
+		logic.SetUserDefaults(&updateUser)
 		copyUser := updateUser
 		copyUser.Password = ""
 		if _, err = logic.UpdateUser(copyUser, updateUser); err != nil {

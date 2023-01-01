@@ -17,6 +17,8 @@ var (
 	Clients_Limit = 1000000000
 	// Free_Tier - specifies if free tier
 	Free_Tier = false
+	// Is_EE - specifies if enterprise
+	Is_EE = false
 )
 
 // constant for database key for storing server ids

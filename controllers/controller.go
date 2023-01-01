@@ -6,9 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/gorilla/handlers"
@@ -28,6 +26,8 @@ var HttpHandlers = []interface{}{
 	extClientHandlers,
 	ipHandlers,
 	loggerHandlers,
+	userGroupsHandlers,
+	networkUsersHandlers,
 }
 
 // HandleRESTRequests - handles the rest requests
@@ -39,7 +39,7 @@ func HandleRESTRequests(wg *sync.WaitGroup) {
 	// Currently allowed dev origin is all. Should change in prod
 	// should consider analyzing the allowed methods further
 	headersOk := handlers.AllowedHeaders([]string{"Access-Control-Allow-Origin", "X-Requested-With", "Content-Type", "authorization"})
-	originsOk := handlers.AllowedOrigins(strings.Split(servercfg.GetAllowedOrigin(), ","))
+	originsOk := handlers.AllowedOrigins([]string{servercfg.GetAllowedOrigin()})
 	methodsOk := handlers.AllowedMethods([]string{"GET", "PUT", "POST", "DELETE"})
 
 	for _, handler := range HttpHandlers {
@@ -59,7 +59,7 @@ func HandleRESTRequests(wg *sync.WaitGroup) {
 
 	// Relay os.Interrupt to our channel (os.Interrupt = CTRL+C)
 	// Ignore other incoming signals
-	ctx, stop := signal.NotifyContext(context.TODO(), syscall.SIGTERM, os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.TODO(), os.Interrupt)
 	defer stop()
 
 	// Block main routine until a signal is received

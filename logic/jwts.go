@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-
 	"github.com/gravitl/netmaker/logger"
 	"github.com/gravitl/netmaker/models"
 	"github.com/gravitl/netmaker/servercfg"
@@ -101,7 +100,7 @@ func CreateUserJWT(username string, networks []string, isadmin bool) (response s
 	return "", err
 }
 
-// VerifyUserToken func will used to Verify the JWT Token while using APIS
+// VerifyToken func will used to Verify the JWT Token while using APIS
 func VerifyUserToken(tokenString string) (username string, networks []string, isadmin bool, err error) {
 	claims := &models.UserClaims{}
 
@@ -114,14 +113,8 @@ func VerifyUserToken(tokenString string) (username string, networks []string, is
 	})
 
 	if token != nil && token.Valid {
-		var user *models.User
 		// check that user exists
-		user, err = GetUser(claims.UserName)
-		if err != nil {
-			return "", nil, false, err
-		}
-
-		if user.UserName != "" {
+		if user, err := GetUser(claims.UserName); user.UserName != "" && err == nil {
 			return claims.UserName, claims.Networks, claims.IsAdmin, nil
 		}
 		err = errors.New("user does not exist")
@@ -133,8 +126,8 @@ func VerifyUserToken(tokenString string) (username string, networks []string, is
 func VerifyToken(tokenString string) (nodeID string, mac string, network string, err error) {
 	claims := &models.Claims{}
 
-	// this may be a stupid way of serving up a master key
-	// TODO: look into a different method. Encryption?
+	//this may be a stupid way of serving up a master key
+	//TODO: look into a different method. Encryption?
 	if tokenString == servercfg.GetMasterKey() && servercfg.GetMasterKey() != "" {
 		return "mastermac", "", "", nil
 	}

@@ -8,10 +8,14 @@ import (
 
 var isEnterprise bool
 
+// IsEnterprise - checks if enterprise binary or not
+func IsEnterprise() bool {
+	return isEnterprise
+}
+
 // setIsEnterprise - sets server to use enterprise features
 func setIsEnterprise() {
 	isEnterprise = true
-	logic.SetEEForTelemetry(isEnterprise)
 }
 
 // base64encode - base64 encode helper function

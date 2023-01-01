@@ -31,7 +31,6 @@ func CheckZombies(newnode *models.Node) {
 	}
 	for _, node := range nodes {
 		if node.MacAddress == newnode.MacAddress {
-			logger.Log(0, "adding ", node.ID, " to zombie list")
 			newZombie <- node.ID
 		}
 	}
@@ -39,8 +38,6 @@ func CheckZombies(newnode *models.Node) {
 
 // ManageZombies - goroutine which adds/removes/deletes nodes from the zombie node quarantine list
 func ManageZombies(ctx context.Context) {
-	logger.Log(2, "Zombie management started")
-	InitializeZombies()
 	for {
 		select {
 		case <-ctx.Done():
@@ -63,14 +60,11 @@ func ManageZombies(ctx context.Context) {
 				logger.Log(3, "no zombies found")
 			}
 		case <-time.After(time.Second * ZOMBIE_TIMEOUT):
-			logger.Log(3, "checking for zombie nodes")
 			if len(zombies) > 0 {
 				for i := len(zombies) - 1; i >= 0; i-- {
 					node, err := GetNodeByID(zombies[i])
 					if err != nil {
 						logger.Log(1, "error retrieving zombie node", zombies[i], err.Error())
-						logger.Log(1, "deleting ", node.Name, " from zombie list")
-						zombies = append(zombies[:i], zombies[i+1:]...)
 						continue
 					}
 					if time.Since(time.Unix(node.LastCheckIn, 0)) > time.Minute*ZOMBIE_DELETE_TIME {
@@ -88,7 +82,7 @@ func ManageZombies(ctx context.Context) {
 }
 
 // InitializeZombies - populates the zombie quarantine list (should be called from initialization)
-func InitializeZombies() {
+func InitalizeZombies() {
 	nodes, err := GetAllNodes()
 	if err != nil {
 		logger.Log(1, "failed to retrieve nodes", err.Error())
@@ -107,10 +101,8 @@ func InitializeZombies() {
 			if node.MacAddress == othernode.MacAddress {
 				if node.LastCheckIn > othernode.LastCheckIn {
 					zombies = append(zombies, othernode.ID)
-					logger.Log(1, "adding ", othernode.Name, " with ID ", othernode.ID, " to zombie list")
 				} else {
 					zombies = append(zombies, node.ID)
-					logger.Log(1, "adding ", node.Name, " with ID ", node.ID, " to zombie list")
 				}
 			}
 		}
